@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<data url="">
+<today title="今日发电量" value="1.90 KWh"/>
+<month title="本月发电量" value="48.83 MWh"/>
+<total title="累计发电量" value="365.41 KWh"/>
+<income title="总   收   益 " value="438497.31 $"/>
+<co2 title="CO2减排量" value="438497.31 T"/>
+</data>

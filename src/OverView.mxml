@@ -1,0 +1,317 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Application xmlns:mx="http://www.adobe.com/2006/mxml"
+				xmlns:component="component.*"
+				minWidth="890" minHeight="560" backgroundAlpha="0"
+				creationComplete="appCreationCompleteHandler(event)" layout="absolute"
+				viewSourceURL="srcview/index.html">
+	<mx:HTTPService id="hs_ovdata" method="GET" result="hs_ovdata_resultHandler(event)"
+					fault="hs_ovdata_faultHandler(event)" resultFormat="text"/>
+	<mx:Script>
+		<![CDATA[
+			import mx.controls.Alert;
+			import mx.events.FlexEvent;
+			import mx.rpc.events.FaultEvent;
+			import mx.rpc.events.ResultEvent;
+			import mx.utils.StringUtil;
+			
+			import logic.ResourceLanguage;
+			
+			import util.Base64;
+			
+			import vo.Config;
+			
+			private var bgUrl:String="";
+			private var bgFile:FileReference;
+			private var bgFileFilter:FileFilter;
+			private var ovData:XML;
+			private var refreshTimer:Timer;
+			
+			[Embed(source="theme/icon/resetbg.png")]
+			[Bindable]
+			private var resetbg:Class;
+			[Embed(source="theme/icon/selectbg.png")]
+			[Bindable]
+			private var selectbg:Class;
+			[Embed(source="theme/icon/big.png")]
+			[Bindable]
+			private var big:Class;
+			[Embed(source="theme/icon/small.png")]
+			[Bindable]
+			private var small:Class;
+			
+			protected function appCreationCompleteHandler(e:FlexEvent):void
+			{
+				if (stage) init();
+				else addEventListener(Event.ADDED_TO_STAGE, initHandler);
+			}
+			
+			private function initHandler(e:Event = null):void 
+			{
+				removeEventListener(Event.ADDED_TO_STAGE, initHandler);
+				
+				//=========================初始化数据
+				Config.Language=this.parameters.lang;//"fr_FR";//"zh_CN";//
+				Config.StationId=this.parameters.sid;//"36";//
+				Config.BaseUrl=this.parameters.baseUrl;//"http://58.210.73.86/";//
+				
+				//=========================设置语言文字
+				ResourceLanguage.setChartResources(resourceManager);
+				resourceManager.localeChain=[Config.Language];
+				
+				//=========================初始化图片选择
+				bgFile=new FileReference();
+				bgFileFilter=new FileFilter("images(*.jpg, *.gif, *.png)","*.jpg;*.gif;*.png");
+				bgFile.addEventListener(Event.SELECT,bgSelectHandler);
+				
+				stage.addEventListener(FullScreenEvent.FULL_SCREEN, fullScreenHandler);
+				
+				//=========================加载数据
+				loadOVData();
+				
+				//=========================初始化数据刷新
+				refreshTimer=new Timer(300000);
+				refreshTimer.addEventListener(TimerEvent.TIMER,RefreshDataHandler);
+				refreshTimer.start();
+				
+				btn_resetbg.toolTip=resourceManager.getString('ChartResources','RESTOREBG');
+				btn_selectbg.toolTip=resourceManager.getString('ChartResources','UPLOADBG');
+				btn_fullscreen.toolTip=resourceManager.getString('ChartResources','FULLSCREEN');
+			}
+			
+			//切换全屏的按钮状态
+			private function fullScreenHandler(e:FullScreenEvent):void 
+			{
+				if (e.fullScreen) {
+					btn_fullscreen.selected=true;
+					btn_resetbg.visible = false;
+					btn_selectbg.visible = false;
+				}
+				else
+				{
+					btn_fullscreen.selected=false;
+					btn_resetbg.visible = true;
+					btn_selectbg.visible = true;
+				}
+			}
+			
+			//=======================选择图片
+			protected function bgSelectHandler(e:Event):void
+			{
+				loading.visible=true;
+				
+				bgFile.addEventListener(Event.COMPLETE,bgFileLoadCompleteHandler);
+				bgFile.addEventListener(IOErrorEvent.IO_ERROR,ioErrorHandler,false,0,true);
+				bgFile.load();
+				//bgFile.addEventListener(DataEvent.UPLOAD_COMPLETE_DATA,uploadCompleteHandler);
+				//bgFile.upload(new URLRequest(Config.FileUploadUrl));
+			}
+			
+			//=======================图片加载后上传
+			protected function bgFileLoadCompleteHandler(e:Event):void
+			{
+				if(FileReference(e.target).hasEventListener(Event.COMPLETE)){
+					FileReference(e.target).removeEventListener(Event.COMPLETE,bgFileLoadCompleteHandler);
+				}
+				
+				if (ByteArray(e.target.data).length > 5000000) {
+					Alert.show(resourceManager.getString('ChartResources','PHOTOSIZE'),resourceManager.getString('ChartResources','PROMPT'));
+					loading.visible=false;
+					return;
+				}
+				
+				var _format:String = getFileType(ByteArray(e.target.data));
+				if (_format == "") {
+					Alert.okLabel=resourceManager.getString('ChartResources','OK');
+					Alert.show(resourceManager.getString('ChartResources','PHOTOFORMATERROR'),resourceManager.getString('ChartResources','PROMPT'));
+					loading.visible=false;
+					return;
+				}
+				
+				var imgdata:String = Base64.encodeByteArray(ByteArray(e.target.data));
+				
+				var r:URLRequest = new URLRequest();
+				r.url = Config.FileUploadUrl;
+				r.method = URLRequestMethod.POST;
+				
+				var _param:URLVariables = new URLVariables();
+				_param.sid = Config.StationId;
+				_param.uid = Config.UserId;
+				_param.imgdata = imgdata;
+				_param.type = "2";
+				r.data = _param;
+				var loader:URLLoader = new URLLoader();
+				loader.addEventListener(Event.COMPLETE, uploadCompleteHandler);
+				loader.dataFormat = "text";
+				loader.load(r);
+				
+				bgFile.cancel();
+				
+				/* var _loader:Loader=new Loader();
+				_loader.contentLoaderInfo.addEventListener(Event.COMPLETE,loadBytesHandler);
+				_loader.contentLoaderInfo.addEventListener(IOErrorEvent.IO_ERROR,loadBytesErrorHandler);
+				_loader.loadBytes(ByteArray(e.target.data)); 
+				FileReference(e.target).cancel(); */
+			}
+			
+			
+			protected function ioErrorHandler(e:IOErrorEvent):void
+			{
+				trace("ioerror");
+			}
+			
+			//上传成功
+			protected function uploadCompleteHandler(e:Event):void
+			{
+				var _data:XML=XML(e.target.data);
+				if(_data.item.@status=="ok"){
+					img_bg.source=_data.item.@imageurl;
+				}
+				else
+				{
+					loading.visible=false;
+				}
+			}
+			
+			protected function loadBytesHandler(e:Event):void
+			{
+				img_bg.source=e.target.content;
+			}
+			
+			protected function loadBytesErrorHandler(e:IOErrorEvent):void
+			{
+				
+			}
+			
+			private function loadOVData():void{
+				hs_ovdata.url=Config.GetOverViewData;
+				hs_ovdata.send();
+			}
+			
+			protected function img_bg_completeHandler(e:Event):void
+			{
+				loading.visible=false;
+			}
+			
+			protected function hs_ovdata_resultHandler(e:ResultEvent):void
+			{
+				ovData=XML(e.result.toString());
+				
+				if(img_bg.source!=ovData.@url){
+					img_bg.source=ovData.@url;
+				}
+				
+				dataCont.lbl_today.text = truncatedString(ovData.today.@title);
+				dataCont.lbl_today.toolTip = ovData.today.@title;
+				dataCont.lbl_month.text = truncatedString(ovData.month.@title);
+				dataCont.lbl_month.toolTip = ovData.month.@title;
+				dataCont.lbl_total.text = truncatedString(ovData.total.@title);
+				dataCont.lbl_total.toolTip = ovData.total.@title;
+				dataCont.lbl_income.text = truncatedString(ovData.income.@title);
+				dataCont.lbl_income.toolTip = ovData.income.@title;
+				dataCont.lbl_co2.text = truncatedString(ovData.co2.@title);
+				dataCont.lbl_co2.toolTip = ovData.co2.@title;
+				dataCont.data_today.text = ovData.today.@value;
+				dataCont.data_month.text = ovData.month.@value;
+				dataCont.data_total.text = ovData.total.@value;
+				dataCont.data_income.text = ovData.income.@value;
+				dataCont.data_co2.text = ovData.co2.@value;
+			}
+			
+			protected function hs_ovdata_faultHandler(e:FaultEvent):void
+			{
+				trace("Error");
+			}
+			
+			protected function RefreshDataHandler(event:TimerEvent):void
+			{
+				loadOVData();
+			}
+			
+			protected function img_bg_ioErrorHandler(e:IOErrorEvent):void
+			{
+				trace("bgIOErr");
+				//img_bg.source=bgUrl;
+			}
+			
+			//恢复默认
+			protected function btn_resetbg_clickHandler(e:MouseEvent):void
+			{
+				//加载默认bg，同时系统后台默认
+				var _loader:URLLoader = new URLLoader();
+				var _request:URLRequest = new URLRequest();
+				_request.url = Config.GetDefaultBgUrl;
+				_loader.addEventListener(Event.COMPLETE, defaultbgCompleteHandler);
+				_loader.load(_request);
+			}
+			
+			private function defaultbgCompleteHandler(e:Event):void 
+			{
+				var _data:XML=XML(e.target.data);
+				if(_data.item.@status=="ok"){
+					
+					if(img_bg.source!=_data.item.@imageurl){
+						loading.visible=true;
+						img_bg.source=_data.item.@imageurl;
+					}
+				}
+				else{
+					trace("reset fault");
+				}
+			}
+			
+			protected function btn_selectbg_clickHandler(e:MouseEvent):void
+			{
+				bgFile.browse([bgFileFilter]);
+			}
+			
+			protected function btn_fullscreen_clickHandler(e:MouseEvent):void
+			{
+				if(stage.displayState==StageDisplayState.FULL_SCREEN){
+					stage.displayState=StageDisplayState.NORMAL;
+				}else{
+					stage.displayState=StageDisplayState.FULL_SCREEN;
+				}
+			}
+			
+			private function getFileType(fileData:ByteArray):String {
+				var b0:uint=fileData.readUnsignedByte();
+				var b1:uint=fileData.readUnsignedByte();
+				var fileType:String ="";
+				if(b0 == 66 && b1 == 77) {
+					fileType ="BMP";
+				}else if(b0 ==255 && b1 == 216) {
+					fileType ="JPG";
+				}else if(b0 ==137 && b1 == 80) {
+					fileType ="PNG";
+				}else if(b0==71 && b1 == 73) {
+					fileType="GIF";
+				}
+				return fileType;
+			}
+			
+			private function truncatedString(source:String):String {
+				var shortString:String = StringUtil.trim(source);
+				
+				//if (source.length != 0 && source.length > 11) {
+				//	shortString = shortString.substr(0, 11);
+				//	shortString += "...";
+				//}
+				return shortString;
+			}
+			
+		]]>
+	</mx:Script>
+	<mx:Canvas id="cv" width="100%" height="100%" backgroundColor="0xd2edff" cornerRadius="10" borderStyle="solid" borderColor="0x409DBB"/>
+	
+	<mx:Image id="img_bg" width="100%" height="100%" horizontalAlign="center" verticalAlign="middle"
+				  maintainAspectRatio="false" scaleContent="true" smoothBitmapContent="true" mask="{cv}"
+				  complete="img_bg_completeHandler(event)" ioError="img_bg_ioErrorHandler(event)"/>
+	<mx:Canvas width="100%" height="100%" cornerRadius="10" borderStyle="solid" borderColor="0x409DBB"/>
+	
+	<component:DataCont id="dataCont" top="30" right="50"/>
+	<mx:SWFLoader id="loading" horizontalCenter="0" verticalCenter="0" source="@Embed('theme/swf/loading11.swf')"/>
+	<mx:Button id="btn_resetbg" buttonMode="true" upSkin="{resetbg}" overSkin="{resetbg}" downSkin="{resetbg}" click="btn_resetbg_clickHandler(event)" bottom="10" right="90"/>
+	<mx:Button id="btn_selectbg" buttonMode="true" upSkin="{selectbg}" overSkin="{selectbg}" downSkin="{selectbg}"  click="btn_selectbg_clickHandler(event)" bottom="10" right="50"/>
+	<mx:Button id="btn_fullscreen" buttonMode="true" toggle="true" upSkin="{big}" overSkin="{big}" downSkin="{big}" selectedUpSkin="{small}" selectedOverSkin="{small}" selectedDownSkin="{small}" click="btn_fullscreen_clickHandler(event)" bottom="10" right="10"/>
+	
+</mx:Application>

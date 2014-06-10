@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mx:Canvas xmlns:mx="http://www.adobe.com/2006/mxml" width="460" height="210">
+	<mx:Style>
+		.textLabel{
+			font-size:18;
+			font-weight:normal;
+			textAlign:left;
+		}
+		.textLabel2{
+			font-size:18;
+			font-weight:normal;
+			textAlign:right;
+		}
+	</mx:Style>
+	<mx:Image source="@Embed('theme/icon/o-line.png')"/>
+	
+	<mx:Label id="lbl_today" x="46" y="12" width="280" height="28" styleName="textLabel" color="0x0064C8"/><!-- fontSize="18" fontWeight="normal" fontFamily="微软雅黑" textAlign="center" color="0x0064C8"/>-->
+	<mx:Label id="lbl_month" x="46" y="51" width="280" height="28" styleName="textLabel" color="0x0064C8"/>
+	<mx:Label id="lbl_total" x="46" y="90" width="280" height="28" styleName="textLabel" color="0x0064C8"/>
+	<mx:Label id="lbl_income" x="46" y="129" width="280" height="28" styleName="textLabel" color="0x0064C8"/>
+	<mx:Label id="lbl_co2" x="46" y="168" width="280" height="28" styleName="textLabel" color="0x0064C8"/>
+	
+	<mx:Label id="data_today" x="230" y="12" width="180" height="28" styleName="textLabel2" color="0x0064C8"/>
+	<mx:Label id="data_month" x="230" y="51" width="180" height="28" styleName="textLabel2" color="0x0064C8"/>
+	<mx:Label id="data_total" x="230" y="90" width="180" height="28" styleName="textLabel2" color="0x0064C8"/>
+	<mx:Label id="data_income" x="230" y="129" width="180" height="28" styleName="textLabel2" color="0x0064C8"/>
+	<mx:Label id="data_co2" x="230" y="168" width="180" height="28" styleName="textLabel2" color="0x0064C8"/>
+</mx:Canvas>
